@@ -1,0 +1,97 @@
+name: wiki-stream
+
+services:
+  # ---------- Kafka: один узел, работает и брокером, и контроллером (KRaft) ----------
+  kafka:
+    image: apache/kafka:4.3.0
+    container_name: kafka
+    ports:
+      - "9094:9094"            
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Три "входа" в Kafka:
+      #   PLAINTEXT  - для контейнеров внутри docker-сети (kafka:9092)
+      #   CONTROLLER - служебный, для KRaft-кворума
+      #   EXTERNAL   - для программ на хосте (localhost:9094)
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  # ---------- Веб-интерфейс для Kafka ----------
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    mem_limit: 512m
+
+  # ---------- S3-хранилище ----------
+  rustfs:
+    image: rustfs/rustfs:1.0.4-glibc
+    container_name: rustfs
+    ports:
+      - "9000:9000"          
+      - "9001:9001"           
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set RUSTFS_ACCESS_KEY in .env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set RUSTFS_SECRET_KEY in .env}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfs-data:/data
+    mem_limit: 512m
+
+  # ---------- Одноразовый контейнер: создает бакет и завершается ----------
+  create-bucket:
+    image: amazon/aws-cli:latest
+    container_name: create-bucket
+    depends_on:
+      - rustfs
+    environment:
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-warehouse}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        aws configure set default.s3.addressing_style path
+        until aws --endpoint-url http://rustfs:9000 s3 ls > /dev/null 2>&1; do
+          echo "waiting for rustfs..."; sleep 2
+        done
+        aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket "$$S3_BUCKET" 2> /dev/null \
+          || aws --endpoint-url http://rustfs:9000 s3 mb "s3://$$S3_BUCKET"
+        echo "bucket $$S3_BUCKET is ready"
+    restart: "no"
+
+volumes:
+  rustfs-data:
