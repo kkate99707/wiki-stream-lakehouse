@@ -43,7 +43,7 @@ Python producer ──► Kafka ──► Spark Structured Streaming
 
 ## Статус
 
-- [ ] Этап 0 — окружение и репозиторий
+- [x] Этап 0 — окружение и репозиторий
 - [ ] Этап 1 — producer
 - [ ] Этап 2 — bronze-слой
 - [ ] Этап 3 — silver-слой
