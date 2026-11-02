@@ -44,7 +44,7 @@ Python producer ──► Kafka ──► Spark Structured Streaming
 ## Статус
 
 - [x] Этап 0 — окружение и репозиторий
-- [ ] Этап 1 — producer
+- [x] Этап 1 — producer
 - [ ] Этап 2 — bronze-слой
 - [ ] Этап 3 — silver-слой
 - [ ] Этап 4 — gold-слой
@@ -53,4 +53,24 @@ Python producer ──► Kafka ──► Spark Structured Streaming
 
 ## Запуск
 
-Инструкция появится по завершении этапа 0.
+Нужны Docker Desktop и [uv](https://docs.astral.sh/uv/).
+
+1. Создать файл с переменными окружения и задать свои ключи:
+   ```bash
+   cp .env.example .env
+   ```
+2. Поднять инфраструктуру (Kafka, Kafka UI, RustFS; топики и бакет создаются автоматически):
+   ```bash
+   docker compose up -d
+   ```
+3. Установить зависимости и запустить producer:
+   ```bash
+   uv sync
+   uv run python -m producer.main
+   ```
+
+| Сервис | Адрес |
+|---|---|
+| Kafka UI | http://localhost:8080 |
+| Консоль RustFS | http://localhost:9001/rustfs/console/ |
+| Kafka для клиентов на хосте | `localhost:9094` |
