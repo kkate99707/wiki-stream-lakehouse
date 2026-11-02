@@ -38,6 +38,29 @@ services:
       retries: 10
       start_period: 20s
 
+
+    # ---------- Одноразовый контейнер: создает топики Kafka и завершается ----------
+  create-topics:
+    image: apache/kafka:4.3.0
+    container_name: create-topics
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        TOPICS=/opt/kafka/bin/kafka-topics.sh
+        # основной поток правок: 3 партиции, хранение 1 сутки
+        $$TOPICS --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic wiki.recentchange --partitions 3 --replication-factor 1 \
+          --config retention.ms=86400000
+        # битые сообщения (DLQ, понадобится на этапе 3): хранение 7 дней
+        $$TOPICS --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic wiki.dlq --partitions 1 --replication-factor 1 \
+          --config retention.ms=604800000
+        $$TOPICS --bootstrap-server kafka:9092 --list
+    restart: "no"
   # ---------- Веб-интерфейс для Kafka ----------
   kafka-ui:
     image: ghcr.io/kafbat/kafka-ui:v1.5.0
