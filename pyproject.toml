@@ -2,7 +2,10 @@
 name = "wiki-stream-lakehouse"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "confluent-kafka>=2.16.1",
+    "httpx>=0.28.1",
+]
 
 [dependency-groups]
 dev = [
@@ -21,3 +24,4 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
